@@ -6,13 +6,31 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8101C8FA3057F42A003269BB /* IOBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8101C8F93057F42A003269BB /* IOBluetooth.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		8101C8E73057F151003269BB /* SoundX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SoundX.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8101C8F93057F42A003269BB /* IOBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOBluetooth.framework; path = System/Library/Frameworks/IOBluetooth.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		8101C8FC3057F4E8003269BB /* Exceptions for "SoundX" folder in "SoundX" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 8101C8E63057F151003269BB /* SoundX */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8101C8E93057F151003269BB /* SoundX */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				8101C8FC3057F4E8003269BB /* Exceptions for "SoundX" folder in "SoundX" target */,
+			);
 			path = SoundX;
 			sourceTree = "<group>";
 		};
@@ -23,6 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8101C8FA3057F42A003269BB /* IOBluetooth.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				8101C8E93057F151003269BB /* SoundX */,
+				8101C8F83057F42A003269BB /* Frameworks */,
 				8101C8E83057F151003269BB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +63,14 @@
 				8101C8E73057F151003269BB /* SoundX.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		8101C8F83057F42A003269BB /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				8101C8F93057F42A003269BB /* IOBluetooth.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -254,11 +282,12 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FLXP76T7M2;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SoundX/Info.plist;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Needed to control your Soundcore earbuds.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -286,11 +315,12 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FLXP76T7M2;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SoundX/Info.plist;
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Needed to control your Soundcore earbuds.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
