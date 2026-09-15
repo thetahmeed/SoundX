@@ -1,9 +1,14 @@
 import SwiftUI
+import AppKit
+import ApplicationServices
+import Combine
 
 struct ContentView: View {
     @StateObject private var bluetooth = BluetoothManager()
+    @StateObject private var shortcuts = KeyboardShortcutManager()
     @State private var manualLevelDraft: Double = 5
     @State private var pulseScale: CGFloat = 1.0
+    @State private var showingSettings = false
 
     var body: some View {
         Group {
@@ -28,7 +33,17 @@ struct ContentView: View {
         .frame(minWidth: 440, idealWidth: 480, minHeight: 560)
         .background(.regularMaterial)
         .animation(.spring(response: 0.45, dampingFraction: 0.86), value: bluetooth.phase)
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(shortcuts: shortcuts)
+        }
         .onAppear { bluetooth.refreshPairedDevices() }
+        .onAppear {
+            shortcuts.onModeShortcut = { mode in
+                bluetooth.setAmbientSoundMode(mode)
+            }
+            shortcuts.startMonitoring()
+        }
+        .onDisappear { shortcuts.stopMonitoring() }
         .onChange(of: bluetooth.state.manualNoiseCancelingLevel) { newValue in
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 manualLevelDraft = Double(newValue)
@@ -191,6 +206,10 @@ struct ContentView: View {
             }
 
             Spacer()
+
+            IconButton(systemImage: "gearshape", help: "Settings") {
+                showingSettings = true
+            }
 
             IconButton(systemImage: "arrow.clockwise", help: "Refresh state") {
                 bluetooth.requestState()
@@ -369,6 +388,9 @@ struct ContentView: View {
             Text(title)
                 .font(.system(.headline, design: .rounded))
             Spacer()
+            IconButton(systemImage: "gearshape", help: "Settings") {
+                showingSettings = true
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
@@ -597,5 +619,262 @@ private extension View {
                     .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
             )
             .shadow(color: .black.opacity(0.06), radius: 8, y: 3)
+    }
+}
+
+private enum ShortcutAction: String, CaseIterable, Codable, Identifiable {
+    case noiseCanceling
+    case transparency
+    case normal
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .noiseCanceling: return "Noise Canceling"
+        case .transparency: return "Transparency"
+        case .normal: return "Normal"
+        }
+    }
+
+    var mode: UInt8 {
+        switch self {
+        case .noiseCanceling: return 0
+        case .transparency: return 1
+        case .normal: return 2
+        }
+    }
+}
+
+private struct ShortcutBinding: Codable, Equatable {
+    let keyCode: UInt16
+    let modifiers: UInt
+}
+
+private final class KeyboardShortcutManager: NSObject, ObservableObject {
+    @Published private(set) var bindings: [ShortcutAction: ShortcutBinding] = [:]
+    @Published private(set) var isAccessibilityEnabled = AXIsProcessTrusted()
+    @Published var recordingAction: ShortcutAction?
+
+    var onModeShortcut: ((UInt8) -> Void)?
+
+    private var localMonitor: Any?
+    private var globalMonitor: Any?
+    private var hasLoaded = false
+
+    func startMonitoring() {
+        guard localMonitor == nil, globalMonitor == nil else { return }
+        loadBindings()
+
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            return self.process(event) ? nil : event
+        }
+
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            _ = self?.process(event)
+        }
+        isAccessibilityEnabled = AXIsProcessTrusted()
+    }
+
+    func stopMonitoring() {
+        if let localMonitor {
+            NSEvent.removeMonitor(localMonitor)
+            self.localMonitor = nil
+        }
+        if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+            self.globalMonitor = nil
+        }
+    }
+
+    func beginRecording(_ action: ShortcutAction) {
+        recordingAction = action
+    }
+
+    func clear(_ action: ShortcutAction) {
+        bindings[action] = nil
+        saveBindings()
+    }
+
+    func requestAccessibilityAccess() {
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        isAccessibilityEnabled = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    func refreshAccessibilityStatus() {
+        isAccessibilityEnabled = AXIsProcessTrusted()
+    }
+
+    func displayName(for action: ShortcutAction) -> String {
+        guard let binding = bindings[action] else { return "Not set" }
+        return shortcutName(binding)
+    }
+
+    private func process(_ event: NSEvent) -> Bool {
+        if let recordingAction {
+            bindings[recordingAction] = ShortcutBinding(
+                keyCode: event.keyCode,
+                modifiers: event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+            )
+            self.recordingAction = nil
+            saveBindings()
+            return true
+        }
+
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+        guard let action = bindings.first(where: {
+            $0.value.keyCode == event.keyCode && $0.value.modifiers == modifiers
+        })?.key else { return false }
+
+        onModeShortcut?(action.mode)
+        return true
+    }
+
+    private func shortcutName(_ binding: ShortcutBinding) -> String {
+        var result = ""
+        let modifiers = NSEvent.ModifierFlags(rawValue: binding.modifiers)
+        if modifiers.contains(.command) { result += "⌘" }
+        if modifiers.contains(.option) { result += "⌥" }
+        if modifiers.contains(.control) { result += "⌃" }
+        if modifiers.contains(.shift) { result += "⇧" }
+        result += keyName(binding.keyCode)
+        return result
+    }
+
+    private func keyName(_ keyCode: UInt16) -> String {
+        let names: [UInt16: String] = [
+            36: "↩", 48: "⇥", 49: "Space", 51: "⌫", 53: "⎋",
+            123: "←", 124: "→", 125: "↓", 126: "↑",
+            122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6",
+            98: "F7", 100: "F8", 101: "F9", 109: "F10", 103: "F11", 111: "F12"
+        ]
+        if let name = names[keyCode] { return name }
+        return "Key \(keyCode)"
+    }
+
+    private func loadBindings() {
+        guard !hasLoaded else { return }
+        hasLoaded = true
+        guard let data = UserDefaults.standard.data(forKey: "keyboardShortcuts"),
+              let decoded = try? JSONDecoder().decode([String: ShortcutBinding].self, from: data) else { return }
+        bindings = decoded.reduce(into: [:]) { result, item in
+            if let action = ShortcutAction(rawValue: item.key) { result[action] = item.value }
+        }
+    }
+
+    private func saveBindings() {
+        let values = bindings.reduce(into: [String: ShortcutBinding]()) { result, item in
+            result[item.key.rawValue] = item.value
+        }
+        if let data = try? JSONEncoder().encode(values) {
+            UserDefaults.standard.set(data, forKey: "keyboardShortcuts")
+        }
+    }
+}
+
+private struct SettingsView: View {
+    @ObservedObject var shortcuts: KeyboardShortcutManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Settings")
+                        .font(.system(.title2, design: .rounded, weight: .semibold))
+                    Text("Keyboard bindings")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "keyboard")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Assign a key to switch modes instantly.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                ForEach(ShortcutAction.allCases) { action in
+                    bindingRow(action)
+                }
+
+                Divider()
+
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: shortcuts.isAccessibilityEnabled ? "checkmark.shield.fill" : "lock.shield")
+                        .foregroundStyle(shortcuts.isAccessibilityEnabled ? .green : .orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(shortcuts.isAccessibilityEnabled ? "Global shortcuts enabled" : "Enable global shortcuts")
+                            .font(.subheadline.weight(.medium))
+                        Text(shortcuts.isAccessibilityEnabled
+                             ? "Bindings work while you use another app."
+                             : "Allow SoundX in System Settings > Privacy & Security > Accessibility.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if !shortcuts.isAccessibilityEnabled {
+                        Button("Open Settings") {
+                            shortcuts.requestAccessibilityAccess()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .padding(24)
+        }
+        .frame(width: 480)
+        .fixedSize(horizontal: false, vertical: true)
+        .onAppear { shortcuts.refreshAccessibilityStatus() }
+    }
+
+    private func bindingRow(_ action: ShortcutAction) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: action == .noiseCanceling ? "waveform.path.ecg" : action == .transparency ? "ear" : "speaker.wave.2")
+                .frame(width: 22)
+                .foregroundStyle(Color.accentColor)
+            Text(action.title)
+                .font(.subheadline)
+            Spacer()
+            if shortcuts.recordingAction == action {
+                Text("Press a key…")
+                    .font(.caption)
+                    .foregroundStyle(Color.accentColor)
+                    .transition(.opacity)
+            } else {
+                Text(shortcuts.displayName(for: action))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            Button(shortcuts.recordingAction == action ? "Cancel" : "Record") {
+                if shortcuts.recordingAction == action {
+                    shortcuts.recordingAction = nil
+                } else {
+                    shortcuts.beginRecording(action)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            if shortcuts.bindings[action] != nil {
+                Button {
+                    shortcuts.clear(action)
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .help("Clear binding")
+            }
+        }
+        .padding(10)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
