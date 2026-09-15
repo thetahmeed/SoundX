@@ -52,7 +52,7 @@ struct A3957State {
 
     var leftBatteryLevel: Int = 0
     var rightBatteryLevel: Int = 0
-    var caseBatteryLevel: Int = 0+
+    var caseBatteryLevel: Int = 0
     var leftCharging: Bool = false
     var rightCharging: Bool = false
 
