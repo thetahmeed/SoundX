@@ -34,7 +34,38 @@ SoundX is a free, open-source macOS app for controlling Soundcore true wireless 
 
 ## Supported Devices
 
-SoundX currently supports the **Soundcore Liberty 5 (model A3957)**. The Bluetooth packet protocol is device-specific, so other Soundcore models are not guaranteed to work out of the box. Support for additional models can be added by reverse-engineering their state-update packet layout; see the Contributing section below.
+SoundX currently supports the **Soundcore Liberty 5 (model A3957)** only. The Bluetooth
+packet protocol differs per device model, so the app is not yet generalized to work with
+other Soundcore earbuds out of the box.
+
+## Adding Support for a New Device
+
+SoundX's outer Bluetooth packet framing (direction bytes, length field, checksum) is shared
+across all Soundcore devices, but the internal state-packet layout, byte offsets, and
+available commands differ per model. Adding a new device involves two parts:
+
+1. **Find the protocol for the target device.** The [OpenSCQ30](https://github.com/Oppzippy/OpenSCQ30)
+   project has independently reverse-engineered and documented the packet format for a wide
+   range of Soundcore models. For a given model, the relevant files live under
+   `lib/src/devices/soundcore/<model>/` in that repository:
+   - `packets/inbound/state_update.rs` — field offsets and the state packet's byte layout
+   - `packets/outbound.rs` — command bytes for each supported action
+   - `modules/*.rs` — which commands are shared across devices versus overridden for that
+     specific model (important: some devices use different command bytes for the same
+     feature, so this step matters and should not be skipped or assumed)
+
+2. **Implement the device in SoundX.** Define a new state struct and parser (following the
+   pattern used for `A3957State` in `BluetoothManager.swift`), along with any
+   device-specific command builders. Longer term, the cleanest path is to factor the current
+   hardcoded A3957 logic behind a `DeviceProfile` abstraction (state parsing, command
+   builders, and a `supportedFeatures` set per model), with `BluetoothManager` selecting the
+   right profile based on the paired device's name. This keeps each new device addition
+   isolated rather than requiring changes throughout the app.
+
+Contributions adding support for additional models are very welcome. If you're submitting
+one, please include a short note on how the protocol details were verified (e.g. a link to
+the corresponding OpenSCQ30 source, or your own packet capture) so the mapping can be
+reviewed.
 
 ## Folder Structure
 
